@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation Sample Template to create a SecurityGroup'
+Resources:
+  SGWebServer:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: SG_WebServer
+      GroupDescription: Security Group for Allowing access to the WebServer
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: '0'
+          ToPort: '65535'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        -
+          Key: Project
+          Value: CloudFormationLearning
+          Key: Name
+          Value: proydev
+      VpcId: vpc-9cd0adfa

@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Template for launching a simple EC2 instance'
+Parameters:
+  PublicSubnet:
+    Description: 'Public Subnet to Launch teh EC2 instance.'
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-80af2cc8
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues: [t2.micro, t2.small, t2.medium, t2.large, m3.medium, m3.large,
+      m3.xlarge, m3.2xlarge, m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
+      c4.large, c4.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, c3.large, c3.xlarge,
+      c3.2xlarge, c3.4xlarge, c3.8xlarge, r3.large, r3.xlarge, r3.2xlarge, r3.4xlarge,
+      r3.8xlarge, i2.xlarge, i2.2xlarge, i2.4xlarge, i2.8xlarge]
+    ConstraintDescription: Please choose a valid instance type.
+  SSHKeyName:
+    Description: SSH Access key
+    Type: String
+    Default: MyEc2KeyPair
+    ConstraintDescription: Please choose a valid KeyName
+  ImageId:
+    Type: String
+    Description: 'AMi ID for launching an instance with Amazon Linux AMI in region Ireland.'
+    Default: 'ami-ca0135b3'
+  SecurityGroup:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: 'Security group to grant or revoke access to the services in the instances'
+    ConstraintDescription: Must be an existing Security SecurityGroup
+
+Resources:
+  MyEc2:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      SecurityGroupIds: !Ref SecurityGroup
+      KeyName: !Ref SSHKeyName
+      Tags:
+        -
+          Key: Project
+          Value: CloudFormationLearning
+          Key: Name
+          Value: proydev
+Outputs:
+  MyEc2:
+    Description: 'Ec2 instance for my web server'
+    Value: !Ref MyEc2
+    Export:
+      Name: !Sub '${AWS::StackName}-MyEc2'
