@@ -54,10 +54,6 @@ Parameters:
     Description: S3 location where custom storage configuration file is localted.
     Type: String
     Default: aws-quickstart/quickstart-sap-hana/scripts
-  Proxy:
-    Description: Proxy address for http access (e.g., http://xyz.abc.com:8080 or http://10.x.x.x:8080).
-    Type: String
-    Default: ''
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
     Default: home
@@ -65,7 +61,7 @@ Parameters:
       with this key pair.
   HANAInstallMedia:
     Description: Full path to Amazon S3 location of SAP HANA software files (e.g.,
-      s3://myhanabucket/sap-hana-sps11/).
+      s3://myhanabucket/sap-hana2-sps02/).
     Type: String
     Default: ''
   EnableLogging:
