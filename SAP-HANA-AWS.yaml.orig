@@ -10,9 +10,30 @@ Parameters:
     Type: String
     Default: 10.254.89.0/24
     AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$"
+  DMZCIDR:
+    Description: CIDR block of the public DMZ subnet where BASTION Host / NAT Gateway exist.
+    Type: String
+    Default: 10.0.2.0/24
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$"
+  RemoteAccessCIDR:
+    Description: CIDR block from where you want to access your RDP instance.
+    Type: String
+    Default: 0.0.0.0/0
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$"
+    ConstraintDescription: This must be a valid CIDR range in the format x.x.x.x/x.
   HANASubnet:
     Type: AWS::EC2::Subnet::Id
-    Description: The existing private subnet within VPC where HANA will be deployed.
+    Description: The existing private subnet in your VPC where you want to deploy SAP HANA.
+  ApplicationCIDR:
+    Description: CIDR block of subnet where SAP Application servers are deployed.
+    Type: String
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))$"
+    Default: 10.254.89.0/24
+    ConstraintDescription: This must be a valid CIDR range in the format.
+  DMZSubnet:
+    Type: AWS::EC2::Subnet::Id
+    Description: The existing public subnet in your VPC where you want to deploy the
+      optional RDP instance.
   DomainName:
     Type: String
     Description: Name to use for fully qualified domain names.
@@ -20,6 +41,10 @@ Parameters:
   HANAMasterHostname:
     Type: String
     Description: Host name to use for SAP HANA master node (DNS short name).
+    Default: saps4-p-d1
+  HANAWorkerHostname:
+    Type: String
+    Description: Host name to use for SAP HANA worker node(s) (DNS short name).
     Default: saps4-p-d1
   PrivateBucket:
     Description: Main build bucket where templates and scripts are located.
@@ -88,6 +113,13 @@ Parameters:
     Default: RedHatLinux73ForSAP
     AllowedValues:
     - RedHatLinux73ForSAP
+  InstallRDPInstance:
+    Type: String
+    Description: Install (Yes) or don't install (No) optional Windows RDP instance.
+    Default: 'No'
+    AllowedValues:
+    - 'Yes'
+    - 'No'
   InstallHANA:
     Type: String
     Description: Install (Yes) or don't install (No) HANA. When set to No, only AWS
@@ -96,6 +128,15 @@ Parameters:
     AllowedValues:
     - 'Yes'
     - 'No'
+  RDPInstanceType:
+    Type: String
+    Description: Instance type for Windows RDP instance.
+    Default: c4.large
+    AllowedValues:
+    - c4.large
+    - c4.xlarge
+    - m4.large
+    - m4.xlarge
   MyInstanceType:
     Type: String
     Description: Instance type for SAP HANA host.
@@ -112,6 +153,13 @@ Parameters:
     - x1.32xlarge
     - x1e.4xlarge
     - x1e.32xlarge
+  HostCount:
+    Type: Number
+    Description: Total number of SAP HANA nodes you want to deploy in the SAP HANA
+      cluster.
+    Default: '1'
+    MinValue: '1'
+    MaxValue: '5'
   SID:
     Type: String
     Default: HDB
@@ -154,12 +202,16 @@ Metadata:
       Parameters:
       - VPCID
       - HANASubnet
+      - DMZSubnet
+      - PrivSubCIDR
+      - DMZCIDR
     - Label:
         default: Server and storage configuration
       Description:
         default: ''
       Parameters:
       - MyOS
+      - SLESBYOSRegCode
       - MyInstanceType
       - HostCount
       - AutoRecovery
@@ -174,6 +226,7 @@ Metadata:
       Parameters:
       - DomainName
       - HANAMasterHostname
+      - HANAWorkerHostname
       - SID
       - SAPInstanceNum
       - HANAMasterPass
@@ -185,7 +238,14 @@ Metadata:
       Description:
         default: ''
       Parameters:
+      - PlacementGroupName
+      - InstallRDPInstance
+      - RDPInstanceType
+      - RemoteAccessCIDR
+      - ApplicationCIDR
       - EnableLogging
+      - CloudTrailS3Bucket
+      - Proxy
     - Label:
         default: Advanced configuration (Do not modify unless directed by AWS Support)
       Description:
@@ -198,26 +258,39 @@ Metadata:
         default: Choose VPC ID
       PrivSubCIDR:
         default: Enter CIDR block for private subnet
+      DMZSubnet:
+        default: Choose public subnet
+      DMZCIDR:
+        default: Enter CIDR block for public subnet
       HANASubnet:
         default: Choose private subnet
+      RemoteAccessCIDR:
+        default: Enter CIDR block for RDP access
       DomainName:
         default: Enter domain name
       HANAMasterHostname:
         default: Enter SAP HANA master host name
+      HANAWorkerHostname:
+        default: Enter SAP HANA worker host name
       HANAInstallMedia:
         default: Enter Amazon S3 URL for SAP HANA software
       CloudTrailS3Bucket:
-        default: Enter S3 bucket name to store AWS CloudTrail trails and AWS Config logs
+        default: Enter S3 bucket name to store AWS CloudTrail trails and AWS Config
+          logs
       PlacementGroupName:
         default: Enter optional placement group name
       PrivateBucket:
         default: Enter private bucket
       CustomStorageConfig:
         default: Enter custom storage configuration location
+      Proxy:
+        default: Enter proxy server address
       KeyName:
         default: Choose key pair
       AutoRecovery:
         default: Would you like to turn on automatic recovery?
+      InstallRDPInstance:
+        default: Do you need a Windows RDP instance?
       InstallHANA:
         default: Install SAP HANA software?
       Encryption:
@@ -228,14 +301,20 @@ Metadata:
         default: Choose storage volume type for SAP HANA Log
       MyOS:
         default: Choose operating system for SAP HANA
+      SLESBYOSRegCode:
+        default: Enter SUSE BYOS Registration Code
       MyInstanceType:
         default: Choose instance type for SAP HANA
+      HostCount:
+        default: Enter number of SAP HANA hosts
       SID:
         default: Enter SAP HANA system ID
       SAPInstanceNum:
         default: Enter SAP HANA instance number
       HANAMasterPass:
         default: Enter SAP HANA password
+      RDPInstanceType:
+        default: Choose instance type for RDP host
       EnableLogging:
         default: Would you like to enable AWS CloudTrail trails and AWS Config?
       SAPTZ:
@@ -246,6 +325,14 @@ Metadata:
     Fn::Equals:
     - Ref: AutoRecovery
     - 'Yes'
+  NeedWindowsInstance:
+    Fn::Equals:
+    - Ref: InstallRDPInstance
+    - 'Yes'
+  PlacementGroupNull:
+    Fn::Equals:
+    - Ref: PlacementGroupName
+    - ''
   UseEncryption:
     Fn::Equals:
     - Ref: Encryption
@@ -254,6 +341,11 @@ Metadata:
     Fn::Equals:
     - Ref: EnableLogging
     - 'Yes'
+  IfAppSubnet:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: ApplicationCIDR
+      - 0.0.0.0/0
   IfUseSLES:
     Fn::Equals:
     - Fn::FindInMap:
@@ -379,7 +471,7 @@ Resources:
     Type: AWS::Config::ConfigurationRecorder
     Condition: IfLogging
     Properties:
-      Name: HANAInstallation-ConfigRecord
+      Name: HANAQuickStart-ConfigRecord
       RecordingGroup:
         ResourceTypes:
         - AWS::S3::Bucket
@@ -820,7 +912,90 @@ Resources:
             - ec2:ModifyNetworkInterfaceAttribute
             Resource:
             - "*"
-  
+  RDPProfile:
+    Condition: NeedWindowsInstance
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - Ref: RDPInstanceRootRole
+  RDPSecurityGroup:
+    Condition: NeedWindowsInstance
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDP Instance security group
+      VpcId:
+        Ref: VPCID
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '3389'
+        ToPort: '3389'
+        CidrIp:
+          Ref: RemoteAccessCIDR
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: '1'
+        ToPort: '65535'
+        CidrIp: 0.0.0.0/0
+  RDPEIP:
+    Condition: NeedWindowsInstance
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  RDPInterface:
+    Condition: NeedWindowsInstance
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      SubnetId:
+        Ref: DMZSubnet
+      Description: Interface for RDP Instance
+      GroupSet:
+      - Ref: RDPSecurityGroup
+      SourceDestCheck: 'true'
+      Tags:
+      - Key: Network
+        Value: Public
+  AssociateRDPEIP:
+    Condition: NeedWindowsInstance
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - RDPEIP
+        - AllocationId
+      NetworkInterfaceId:
+        Ref: RDPInterface
+  RDPInstance:
+    Condition: NeedWindowsInstance
+    Type: AWS::EC2::Instance
+    Properties:
+      NetworkInterfaces:
+      - NetworkInterfaceId:
+          Ref: RDPInterface
+        DeviceIndex: '0'
+      KeyName:
+        Ref: KeyName
+      ImageId:
+        Fn::FindInMap:
+        - AWSAMIRegionMap
+        - Ref: AWS::Region
+        - WS2012R2
+      IamInstanceProfile:
+        Ref: RDPProfile
+      Tags:
+      - Key: Name
+        Value: SAP RDP Instance (Public Subnet)
+      InstanceType:
+        Ref: RDPInstanceType
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+          - ''
+          - - "<powershell>\n"
+            - "Set-ExecutionPolicy RemoteSigned -Force \n"
+            - "Start-Process -FilePath msiexec -ArgumentList /i,  \"http://sdk-for-net.amazonwebservices.com/latest/AWSToolsAndSDKForNet.msi\",
+              /passive -wait \n"
+            - "</powershell>"
   HANAMasterInstance:
     Type: AWS::EC2::Instance
     Metadata:
